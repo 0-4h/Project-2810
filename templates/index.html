@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>XPower — 固定费率账单演示</title>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>.row-btns{display:flex;gap:8px;flex-wrap:wrap}</style>
+</head>
+<body>
+<main class="container">
+  <h1>XPower — 固定费率账单</h1>
+
+  {% with messages = get_flashed_messages() %}
+  {% if messages %}
+    <div class="flash success">{% for m in messages %}<p>{{ m }}</p>{% endfor %}</div>
+  {% endif %}
+  {% endwith %}
+
+  <!-- 账单计算表单（保留） -->
+  <form method="post" enctype="multipart/form-data" class="card">
+    <label>上传 CSV（需包含列：kWh）</label>
+    <input type="file" name="file" accept=".csv" required />
+    <div class="grid2">
+      <div>
+        <label>费率 ($/kWh)</label>
+        <input type="number" step="0.0001" name="rate" value="{{ rate|default(0.25, true) }}" required />
+      </div>
+      <div>
+        <label>固定费用 ($)</label>
+        <input type="number" step="0.01" name="fixed_fee" value="{{ fixed_fee|default(10, true) }}" required />
+      </div>
+    </div>
+    <button type="submit" class="btn primary">计算账单</button>
+  </form>
+
+  {% if total_bill is not none %}
+  <section class="card">
+    <h2>计算结果</h2>
+    <ul class="stats">
+      <li><strong>总用电量</strong><span>{{ total_usage|default(0, true) }} kWh</span></li>
+      <li><strong>费率</strong><span>${{ (rate|default(0.25, true))|round(4) }}/kWh</span></li>
+      <li><strong>固定费用</strong><span>${{ (fixed_fee|default(10, true))|round(2) }}</span></li>
+      <li><strong>账单金额</strong><span class="highlight">${{ (total_bill|default(0, true))|round(2) }}</span></li>
+    </ul>
+  </section>
+
+  {% if rows %}
+  <section class="card">
+    <h2>用电趋势（前 200 行）</h2>
+    <canvas id="usageChart" height="110"></canvas>
+  </section>
+
+  <section class="card">
+    <h2>数据预览（前 200 行）</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>{% for k in rows[0].keys() %}<th>{{ k }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for r in rows %}<tr>{% for v in r.values() %}<td>{{ v }}</td>{% endfor %}</tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+  {% endif %}
+
+  <!-- 测试与覆盖率：只保留“后台运行 + 新标签查看” -->
+  <section class="card">
+    <h2>测试与覆盖率</h2>
+
+    <!-- 触发后台运行（生成最新报告） -->
+    <div class="row-btns" style="margin-bottom:6px">
+      <button type="button" class="btn secondary"
+              onclick="fetch('/api/tests/start',{method:'POST'}).then(()=>alert('单元测试已启动，稍后用下方链接查看最新报告'))">
+        后台运行单元测试
+      </button>
+      <button type="button" class="btn secondary"
+              onclick="fetch('/api/cov/start',{method:'POST'}).then(()=>alert('覆盖率测试已启动，稍后用下方链接查看最新报告'))">
+        后台运行覆盖率测试
+      </button>
+    </div>
+
+    <!-- 在新标签页打开报告（始终查看当前磁盘上的最新报告） -->
+    <div class="row-btns">
+      <a class="btn secondary" href="/report/tests?sort=result" target="_blank">打开单元测试报告</a>
+      <a class="btn secondary" href="/report/cov?sort=result"   target="_blank">打开覆盖率报告</a>
+    </div>
+  </section>
+</main>
+
+{% if rows %}
+<script id="rows-data" type="application/json">{{ rows|default([], true)|tojson }}</script>
+<script>
+  const rows = JSON.parse(document.getElementById('rows-data').textContent);
+  const labels = rows.map((_, i) => i + 1);
+  const data = rows.map(r => Number(r.kWh));
+  const ctx = document.getElementById('usageChart').getContext('2d');
+  new Chart(ctx, { type:'line', data:{ labels, datasets:[{ label:'kWh', data }] },
+    options:{ responsive:true, scales:{ x:{ title:{ display:true, text:'记录序号'}},
+                                       y:{ title:{ display:true, text:'kWh'}}}}});
+</script>
+{% endif %}
+</body>
+</html>
